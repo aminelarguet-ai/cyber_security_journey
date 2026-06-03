@@ -1,4 +1,5 @@
 import os
+import sys
         
           
         
@@ -44,25 +45,6 @@ def inside_comment(string):
 
         
 
-
-
-    
-
-def value_checker(chaine):
-
-    """
-    this functions aims to treat dome edge cases regardinig input values 
-    """
-    if not chaine :
-        return ""
-    
-    
-    
-
-
-
-
-
 def is_int (string):
     try :
         int(string)
@@ -79,19 +61,23 @@ def is_float (string):
                 
 
 def sort_type(line):#this function aims t convert each string to its actual type 
-    
-    if line.lower() == "true":
-        return True 
-    elif line.lower() == "false":
-        return False 
-    elif line.startswith("'") and line.endswith("'") or line.startswith('"') and line.endswith('"'):
-        return line[1:-1]
-    elif is_int(line):
-        return int(line) 
-    elif is_float (line):
-        return float(line) 
+    if not line :
+        return ""
     else :
-        return line 
+         if line.lower() == "true":
+            return True 
+         elif line.lower() == "false":
+            return False 
+         elif line.startswith("'") and line.endswith("'") or line.startswith('"') and line.endswith('"'):
+            return line[1:-1]
+         elif is_int(line):
+            return int(line) 
+         elif is_float (line):
+            return float(line) 
+         else :
+            return line
+    
+    
 
 def file_check(file_path):# check file existence 
     if os.path.exists(file_path):
@@ -125,15 +111,55 @@ def read_and_parse (file_path):
                         key = key.strip()
                         value , nested_comment = inside_comment(value)
                         value = sort_type(value.strip())
-                        data_parse [key] = value
+                        if value == "" :
+                            data_parse [key] = f"missing value by line {idx+1}"
+                        else :
+                            data_parse [key] = value
+
                         if  nested_comment :
                             comment [f"extracted comment {idx+1}"] = nested_comment
 
             print ("comments:",comment)
             print ("key found:",data_parse)
             return data_parse , comment   
+        
 
-                
+def load (dic):
+    for key , value in dic.items():
+        os.environ[key] = str(value)
+
+def get(key, default=None):
+    return os.environ.get(key, default)
+
+
+
+def load_env(file_path): # take the parsed values from the read and parse function and load them in teh env 
+    data , comment = read_and_parse(file_path)
+    load (data)
+
+def require(key_list) :
+    
+    catched_error = {}
+
+    for key in key_list:
+        if key not in os.environ:
+            catched_error[key] = f"missing required key: {key}"
+
+    if catched_error:
+        for msg in catched_error.values():
+
+            print(f" {msg}")   
+        sys.exit(1)
+
+    print("all keys have been successfully tested")
+       
+
+    
+
+        
+
+            
+
 
          
 
@@ -144,6 +170,9 @@ def read_and_parse (file_path):
     
 
 
-if __name__ == "__main__" :
-    read_and_parse(".env")
-    
+if __name__ == "__main__":
+    load_env(".env")
+    print("DATABASE_URL" in os.environ)
+    require(["DATABASE_URL", "API_KEY", "DEBUG"])
+    print(get("DATABASE_URL"))
+    print(get("MISSING_KEY", "not found"))
