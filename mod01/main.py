@@ -1,20 +1,18 @@
 import os
 import sys
-        
+sensitive = {"password", "secret", "key", "token", "api"}       
           
         
 
 
 def inside_comment(string):
+    # cheking the presence if comments in the value strings and returning them f found
     value =""
     comment = ""
     in_quote = False 
-    
     idx = None
     for i , char in enumerate(string) :
-        
-
-
+         
         if char in ("'", '"') and in_quote == False :
             
             in_quote = True 
@@ -25,8 +23,6 @@ def inside_comment(string):
         
         if char == "#" and not in_quote :
               idx = i 
-
-                      
               value = string[:idx]
               comment = string[idx+1:]
               break 
@@ -37,8 +33,6 @@ def inside_comment(string):
          value = string 
          comment = ""
     
-         
-
     return value , comment
 
 
@@ -77,24 +71,21 @@ def sort_type(line):#this function aims t convert each string to its actual type
          else :
             return line
     
-    
 
 def file_check(file_path):# check file existence 
     if os.path.exists(file_path):
-        print(f"{file_path} does exist ")
         return True 
     else :
-        print (f"{file_path} does not exist ")
         return False 
 
-"""
+
+def read_and_parse (file_path):
+    """
 this function will read the file line by line and parse the data as comments pairs of key and values skipping empty lines
 """
-def read_and_parse (file_path):
     data_parse = {}
     comment= {}
     if not file_check (file_path):
-        print("File not found. Exiting.")
         return None
     else :
         with open (file_path , "r") as f :
@@ -118,18 +109,29 @@ def read_and_parse (file_path):
 
                         if  nested_comment :
                             comment [f"extracted comment {idx+1}"] = nested_comment
-
-            print ("comments:",comment)
-            print ("key found:",data_parse)
             return data_parse , comment   
         
 
 def load (dic):
     for key , value in dic.items():
         os.environ[key] = str(value)
+def mask (string):
+    if len(string) <= 4 :
+        return "*" * len(string)
+    return string[:4] + "*" * (len(string)-4)
 
-def get(key, default=None):
-    return os.environ.get(key, default)
+
+def is_sensitive(key):
+     #find common values that wwe want to be masked while treating few edge cases such as monkey
+    parts = key.lower().split("_")
+    return any(part in sensitive for part in parts)
+
+
+def get(key, default=None ,masked = False):
+    value = os.environ.get(key, default)
+    if is_sensitive(key) or masked :
+        return mask(str(value))
+    return value
 
 
 
@@ -176,3 +178,6 @@ if __name__ == "__main__":
     require(["DATABASE_URL", "API_KEY", "DEBUG"])
     print(get("DATABASE_URL"))
     print(get("MISSING_KEY", "not found"))
+    print(get("API_KEY"))           
+    print(get("DATABASE_URL"))      
+    print(get("API_KEY", masked=True))  

@@ -1,20 +1,50 @@
 # env-parser
 
-A lightweight `.env` file parser with secret management, built in pure Python (no dependencies).
+A lightweight `.env` parser and environment loader built in pure Python with no third-party runtime dependencies.
+
+This project was created as a learning challenge to understand how environment management libraries work internally before adopting production solutions such as python-dotenv.
 
 ## Features
 
-- Parses `.env` files into typed Python dictionaries
-- Automatic type casting (bool, int, float, str)
-- Handles quoted string values
-- Strips inline comments from values
-- Tracks full-line and inline comments with line numbers
-- Loads variables into os.environ
-- Required key validation with automatic pipeline failure
-- No third-party libraries required
+* Parse `.env` files into typed Python dictionaries
+* Automatic type conversion:
+
+  * `True` / `False` → bool
+  * integers → int
+  * decimals → float
+  * quoted values → str
+* Preserve `#` characters inside quoted strings
+* Strip inline comments from values
+* Track full-line and inline comments
+* Load variables into `os.environ`
+* Retrieve values through a unified API
+* Required key validation with automatic pipeline failure
+* Basic secret detection and masking
+* Pytest test suite covering common parsing edge cases
+* No third-party runtime dependencies
+
+---
+
+## Installation
+
+Clone the repository:
+
+```bash
+git clone <repo-url>
+cd env-parser
+```
+
+Optional testing dependency:
+
+```bash
+pip install pytest
+```
+
+---
 
 ## Usage
 
+```python
 from env_parser import load_env, get, require
 
 load_env(".env")
@@ -23,60 +53,194 @@ require(["DATABASE_URL", "API_KEY", "SECRET_KEY"])
 
 print(get("DATABASE_URL"))
 print(get("MISSING_KEY", "default"))
+```
 
-## .env format supported
+### Secret masking
 
+```python
+print(get("API_KEY"))
+```
+
+Output:
+
+```text
+abcd******
+```
+
+Explicit masking:
+
+```python
+print(get("API_KEY", masked=True))
+```
+
+---
+
+## Supported .env Syntax
+
+```env
 # full line comment
-DEBUG=False
-PORT=5432
-API_KEY=sk-abc123       # inline comment — stripped automatically
-NAME="John # Smith"     # quoted # signs are not treated as comments
-EMPTY=                  # empty values are handled gracefully
 
-## Implementation notes
+DEBUG=False
+
+PORT=5432
+
+DATABASE_URL=postgres://localhost/db
+
+TOKEN=abc=123=xyz
+
+API_KEY=secret123 # production key
+
+NAME="John # Smith"
+
+EMPTY=
+```
+
+---
+
+## Testing
+
+Run the test suite:
+
+```bash
+pytest
+```
+
+Run a specific file:
+
+```bash
+pytest test_parser.py
+```
+
+Current test coverage includes:
+
+* Normal values
+* Empty values
+* Multiple `=` characters
+* Inline comment stripping
+* Hash signs inside quoted strings
+* Secret masking
+* Sensitive key detection
+
+---
+
+## Implementation Notes
 
 ### inside_comment()
 
 Detecting inline comments was the most challenging part of Phase 1.
 
-The naive approach — str.find("#") — returns the first # in the string,
-which breaks on values like NAME="John # Smith" where the # is inside quotes
-and should not be treated as a comment.
+A naive implementation using:
 
-A first attempt used str.find() in a loop to collect all # positions,
-then compared each position against the quote boundaries to find the real one.
-This worked but introduced complexity: a position list, a j counter,
-and bounds checking to avoid index errors.
+```python
+string.find("#")
+```
 
-The final version is simpler — a single loop over each character that tracks
-whether we are currently inside quotes via an in_quote flag. When a # is
-found outside quotes, we record its position and break immediately.
+fails for values such as:
 
-Key lessons:
-- str.find() alone is not enough when context matters
-- A boolean flag is simpler than tracking position ranges
-- idx = None is a cleaner sentinel than idx = 0 since 0 is a valid position
+```env
+NAME="John # Smith"
+```
 
-### load_env(), get(), require()
+because the `#` belongs to the value rather than a comment.
 
-Phase 2 introduced three functions that turn the parser into a usable tool.
+The final implementation performs a character-by-character scan while tracking whether the parser is currently inside quotes.
 
-load_env() parses the .env file and injects every key into os.environ
-so the entire process and its subprocesses can access the values.
+When a `#` is encountered outside quotes, the parser extracts the value and comment portions immediately.
 
-get() wraps os.environ.get() as a single point of control — masking,
-casting, and logging can be added later without touching calling code.
+Lessons learned:
 
-require() collects all missing required keys before calling sys.exit(1),
-so the pipeline fails with a complete error report rather than one key at a time.
+* Context matters more than character matching
+* Simple state tracking often beats position bookkeeping
+* `idx = None` is a safer sentinel than `idx = 0`
+
+---
+
+### Secret Handling
+
+Sensitive values are identified through common environment variable naming conventions:
+
+```text
+PASSWORD
+SECRET
+TOKEN
+API_KEY
+SECRET_KEY
+```
+
+The parser masks these values when retrieved through `get()`.
+
+Example:
+
+```text
+API_KEY=abcdefgh12345
+```
+
+becomes:
+
+```text
+abcd**********
+```
+
+This prevents accidental disclosure during debugging and logging.
+
+---
+
+### Validation
+
+The `require()` function validates required environment variables before application startup.
+
+Instead of failing on the first missing key, it collects all missing variables and reports them together before exiting.
+
+Example:
+
+```python
+require([
+    "DATABASE_URL",
+    "API_KEY",
+    "SECRET_KEY"
+])
+```
+
+---
 
 ## Roadmap
 
-- [x] Parse .env into typed Python dictionary
-- [x] Automatic type casting
-- [x] Inline comment handling
-- [x] Load parsed data into os.environ
-- [x] Required key validation with sys.exit(1)
-- [ ] Secret masking in output
-- [ ] Write/update .env file
-- [ ] Nested variable expansion e.g. BASE_URL=${HOST}:${PORT}
+### Completed
+
+* [x] Parse `.env` files into dictionaries
+* [x] Automatic type casting
+* [x] Inline comment handling
+* [x] Quoted string support
+* [x] Load values into `os.environ`
+* [x] Required key validation
+* [x] Secret masking
+* [x] Sensitive key detection
+* [x] Pytest test suite
+
+### Planned
+
+* [ ] Write/update `.env` files
+* [ ] Nested variable expansion
+
+```env
+BASE_URL=${HOST}:${PORT}
+```
+
+* [ ] Optional overwrite mode
+* [ ] Export environment variables
+* [ ] Improved quote escaping support
+* [ ] Enhanced secret management features
+
+---
+
+## Learning Goals
+
+This project is intentionally implemented from scratch as a software engineering and cybersecurity learning exercise.
+
+Objectives:
+
+* Understand configuration management
+* Learn parser design
+* Practice testing and validation
+* Explore environment-based secret handling
+* Compare custom implementations against professional libraries
