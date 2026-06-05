@@ -54,7 +54,7 @@ def is_float (string):
         return False 
                 
 
-def sort_type(line):#this function aims t convert each string to its actual type 
+def sort_type(line):#this function aims to convert each string to its actual type 
     if not line :
         return ""
     else :
@@ -115,6 +115,8 @@ this function will read the file line by line and parse the data as comments pai
 def load (dic):
     for key , value in dic.items():
         os.environ[key] = str(value)
+
+
 def mask (string):
     if len(string) <= 4 :
         return "*" * len(string)
@@ -150,10 +152,35 @@ def require(key_list) :
     if catched_error:
         for msg in catched_error.values():
 
-            print(f" {msg}")   
+            print(f"{msg}")   
         sys.exit(1)
 
     print("all keys have been successfully tested")
+
+
+def write(data):
+    parsed_list = []
+    for key , value in data.items():
+        parsed_list.append(f"{key}={value}\n")
+    return parsed_list
+
+
+def write_env(file_path , data , overwrite=False):
+    # load the vparsed data from read_and_parse in a new file
+    if not data :
+        return None 
+    if file_check(file_path) and not overwrite :
+        print (f"this file {file_path} already exists")
+        return None
+    with open (file_path,"w") as f :
+        L = write(data)
+        f.writelines(L)
+    return True 
+
+
+
+    
+
        
 
     
@@ -166,18 +193,6 @@ def require(key_list) :
          
 
 
-
-
-
-    
-
-
 if __name__ == "__main__":
     load_env(".env")
-    print("DATABASE_URL" in os.environ)
-    require(["DATABASE_URL", "API_KEY", "DEBUG"])
-    print(get("DATABASE_URL"))
-    print(get("MISSING_KEY", "not found"))
-    print(get("API_KEY"))           
-    print(get("DATABASE_URL"))      
-    print(get("API_KEY", masked=True))  
+    

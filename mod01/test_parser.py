@@ -1,5 +1,6 @@
-from main import mask, is_sensitive ,read_and_parse
+from main import mask, is_sensitive ,read_and_parse , write_env
 import pytest
+
 def test_mask_short():
     assert mask("abc") == "***"
 
@@ -42,3 +43,27 @@ def test_inline_comment(env_data):
 def test_hash_inside_quotes(env_data):
     assert env_data["NAME"] == "John # Smith"
     
+
+def test_write_env(tmp_path):
+    file = tmp_path / "test_output.env"
+    data = {"PORT": 5432, "DEBUG": False}
+    result = write_env(str(file), data)
+    assert result == True
+
+
+def test_data_inside(tmp_path):
+    file = tmp_path / "test_output.env"
+    data = {"PORT": 5432, "DEBUG": False}
+    result = write_env(str(file), data)
+    with open (tmp_path / "test_output.env" , "r") as f :
+        test = f.read()
+    assert "PORT=5432" in test
+
+def test_write_env_no_overwrite(tmp_path):
+    file = tmp_path / "test.env"
+
+    write_env(str(file), {"A": 1})
+
+    result = write_env(str(file), {"B": 2})
+
+    assert result is None

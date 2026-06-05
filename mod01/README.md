@@ -1,33 +1,35 @@
 # env-parser
 
-A lightweight `.env` parser and environment loader built in pure Python with no third-party runtime dependencies.
+A lightweight `.env` parser, environment loader, and exporter built in pure Python with no third-party runtime dependencies.
 
-This project was created as a learning challenge to understand how environment management libraries work internally before adopting production solutions such as python-dotenv.
+This project was created as a learning exercise to understand how environment configuration systems and secret handling work internally before using production tools such as `python-dotenv`.
+
+---
 
 ## Features
 
 * Parse `.env` files into typed Python dictionaries
 * Automatic type conversion:
-
-  * `True` / `False` → bool
-  * integers → int
-  * decimals → float
-  * quoted values → str
-* Preserve `#` characters inside quoted strings
-* Strip inline comments from values
-* Track full-line and inline comments
+  * `True` / `False` → `bool`
+  * integers → `int`
+  * floats → `float`
+  * quoted values → `str` (with quotes stripped)
+* Preserve `#` inside quoted strings
+* Strip inline comments safely
+* Track full-line comments and inline comments separately
 * Load variables into `os.environ`
-* Retrieve values through a unified API
-* Required key validation with automatic pipeline failure
-* Basic secret detection and masking
-* Pytest test suite covering common parsing edge cases
-* No third-party runtime dependencies
+* Unified `get()` API for environment access
+* Required key validation with full error reporting
+* Secret detection and optional masking
+* Export environment data back to `.env` files
+* Safe file writing with overwrite protection
+* Pytest test suite covering parsing edge cases
+* Static security scan validated with Bandit (clean report)
+* No external runtime dependencies
 
 ---
 
 ## Installation
-
-Clone the repository:
 
 ```bash
 git clone <repo-url>
@@ -40,48 +42,89 @@ Optional testing dependency:
 pip install pytest
 ```
 
+Optional security check:
+
+```bash
+pip install bandit
+```
+
+Run security scan:
+
+```bash
+bandit -r .
+```
+
 ---
 
 ## Usage
 
 ```python
-from env_parser import load_env, get, require
+from main import load_env, get, require
 
+# Load a .env file into os.environ
 load_env(".env")
 
+# Validate required keys exist
 require(["DATABASE_URL", "API_KEY", "SECRET_KEY"])
 
+# Retrieve a value
 print(get("DATABASE_URL"))
-print(get("MISSING_KEY", "default"))
-```
 
-### Secret masking
-
-```python
+# Retrieve a sensitive value (auto-masked based on key name)
 print(get("API_KEY"))
-```
 
-Output:
-
-```text
-abcd******
-```
-
-Explicit masking:
-
-```python
-print(get("API_KEY", masked=True))
+# Force masking regardless of key name
+print(get("SOME_VAR", masked=True))
 ```
 
 ---
 
-## Supported .env Syntax
+## Exporting environment data
+
+You can write parsed or modified environment data back to a file:
+
+```python
+from main import write_env
+
+data = {"PORT": 5432, "DEBUG": False}
+write_env(".env.backup", data, overwrite=False)
+```
+
+### Overwrite protection
+
+If the file already exists and `overwrite=False`, the function prints a message and returns `None` instead of raising an exception:
+
+```python
+result = write_env(".env", data, overwrite=False)
+if result is None:
+    print("File already exists, skipping.")
+```
+
+---
+
+## Secret masking
+
+Keys containing sensitive substrings (`password`, `secret`, `key`, `token`, `api`) are automatically masked. The first 4 characters are preserved; the rest are replaced with `*`.
+
+```python
+print(get("API_KEY"))
+# Output: abcd******
+```
+
+Explicit masking can also be forced:
+
+```python
+print(get("SOME_VAR", masked=True))
+```
+
+---
+
+## Supported `.env` syntax
 
 ```env
 # full line comment
 
 DEBUG=False
-
 PORT=5432
 
 DATABASE_URL=postgres://localhost/db
@@ -97,150 +140,111 @@ EMPTY=
 
 ---
 
+## API Reference
+
+### `read_and_parse(file_path)`
+Reads a `.env` file and returns a tuple of `(data, comments)`.
+- `data`: dict of parsed key-value pairs with automatic type conversion
+- `comments`: dict tracking full-line and inline comments
+
+### `load_env(file_path)`
+Parses a `.env` file and loads all variables into `os.environ`.
+
+### `get(key, default=None, masked=False)`
+Retrieves a value from `os.environ`. Returns `default` if the key is not found. Automatically masks values for sensitive keys; set `masked=True` to force masking.
+
+### `require(key_list)`
+Validates that all keys in `key_list` exist in `os.environ`. Prints missing keys and calls `sys.exit(1)` if any are missing.
+
+### `write_env(file_path, data, overwrite=False)`
+Writes a dictionary of key-value pairs to a `.env` file. Returns `True` on success, `None` if the file exists and `overwrite=False`.
+
+---
+
 ## Testing
 
-Run the test suite:
+Run all tests:
 
 ```bash
 pytest
 ```
 
-Run a specific file:
+Run specific file:
 
 ```bash
 pytest test_parser.py
 ```
 
-Current test coverage includes:
+### Test coverage
 
-* Normal values
+* Normal key/value parsing
 * Empty values
-* Multiple `=` characters
+* Multiple `=` handling
 * Inline comment stripping
-* Hash signs inside quoted strings
+* Quotes with `#` inside
+* Type conversion (`bool`, `int`, `float`, `str`)
 * Secret masking
 * Sensitive key detection
+* File write with and without overwrite protection
+
+---
+
+## Security
+
+This project is periodically scanned using:
+
+* Bandit (static security analysis)
+
+Current status:
+
+> ✅ Clean report (no known security issues detected in current codebase)
 
 ---
 
 ## Implementation Notes
 
-### inside_comment()
+### Comment parsing strategy
 
-Detecting inline comments was the most challenging part of Phase 1.
+Inline comments are handled using a single-pass parser that tracks whether the cursor is inside quotes.
 
-A naive implementation using:
-
-```python
-string.find("#")
-```
-
-fails for values such as:
+This ensures that:
 
 ```env
 NAME="John # Smith"
 ```
 
-because the `#` belongs to the value rather than a comment.
+does not incorrectly treat `# Smith` as a comment.
 
-The final implementation performs a character-by-character scan while tracking whether the parser is currently inside quotes.
+### Type conversion
 
-When a `#` is encountered outside quotes, the parser extracts the value and comment portions immediately.
+Values are converted in the following order:
+1. Empty string → `""`
+2. `"true"` / `"false"` (case-insensitive) → `bool`
+3. Quoted strings (`"..."` or `'...'`) → inner string
+4. Valid integers → `int`
+5. Valid floats → `float`
+6. Everything else → `str`
 
-Lessons learned:
+### Write system
 
-* Context matters more than character matching
-* Simple state tracking often beats position bookkeeping
-* `idx = None` is a safer sentinel than `idx = 0`
-
----
-
-### Secret Handling
-
-Sensitive values are identified through common environment variable naming conventions:
-
-```text
-PASSWORD
-SECRET
-TOKEN
-API_KEY
-SECRET_KEY
-```
-
-The parser masks these values when retrieved through `get()`.
-
-Example:
-
-```text
-API_KEY=abcdefgh12345
-```
-
-becomes:
-
-```text
-abcd**********
-```
-
-This prevents accidental disclosure during debugging and logging.
-
----
-
-### Validation
-
-The `require()` function validates required environment variables before application startup.
-
-Instead of failing on the first missing key, it collects all missing variables and reports them together before exiting.
-
-Example:
+The exporter converts dictionary data into `.env` format:
 
 ```python
-require([
-    "DATABASE_URL",
-    "API_KEY",
-    "SECRET_KEY"
-])
+KEY=value
 ```
 
----
+It supports safe file creation with overwrite protection:
 
-## Roadmap
-
-### Completed
-
-* [x] Parse `.env` files into dictionaries
-* [x] Automatic type casting
-* [x] Inline comment handling
-* [x] Quoted string support
-* [x] Load values into `os.environ`
-* [x] Required key validation
-* [x] Secret masking
-* [x] Sensitive key detection
-* [x] Pytest test suite
-
-### Planned
-
-* [ ] Write/update `.env` files
-* [ ] Nested variable expansion
-
-```env
-BASE_URL=${HOST}:${PORT}
+```python
+if file_check(file_path) and not overwrite:
+    print(f"this file {file_path} already exists")
+    return None
 ```
 
-* [ ] Optional overwrite mode
-* [ ] Export environment variables
-* [ ] Improved quote escaping support
-* [ ] Enhanced secret management features
+### Design philosophy
 
----
+This project follows a simple processing pipeline:
 
-## Learning Goals
-
-This project is intentionally implemented from scratch as a software engineering and cybersecurity learning exercise.
-
-Objectives:
-
-* Understand configuration management
-* Learn parser design
-* Practice testing and validation
-* Explore environment-based secret handling
-* Compare custom implementations against professional libraries
+```
+Parse → Validate → Load → Mask → Export
+```
