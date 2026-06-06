@@ -79,6 +79,44 @@ def file_check(file_path):# check file existence
         return False 
 
 
+def expand(data: dict):
+    if not data:
+        return None
+
+    for key in list(data.keys()):
+        value = str(data[key])
+
+        seen_states = set()  
+
+        while "${" in value:
+            if value in seen_states:
+                print(f"Circular reference detected while expanding '{key}'")
+                break
+
+            seen_states.add(value)
+
+            start = value.find("${")
+            end = value.find("}", start)
+
+            if end == -1:
+                break
+
+            var = value[start + 2:end]
+
+            replacement = str(data.get(var, f"${{{var}}}"))
+
+            value = value[:start] + replacement + value[end + 1:]
+
+        data[key] = value
+
+    return data
+
+
+
+    
+    
+
+
 def read_and_parse (file_path):
     """
 this function will read the file line by line and parse the data as comments pairs of key and values skipping empty lines
@@ -139,6 +177,7 @@ def get(key, default=None ,masked = False):
 
 def load_env(file_path): # take the parsed values from the read and parse function and load them in teh env 
     data , comment = read_and_parse(file_path)
+    data = expand(data)
     load (data)
 
 def require(key_list) :

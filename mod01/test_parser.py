@@ -1,4 +1,4 @@
-from main import mask, is_sensitive ,read_and_parse , write_env
+from main import mask, is_sensitive ,read_and_parse , write_env , expand
 import pytest
 
 def test_mask_short():
@@ -67,3 +67,65 @@ def test_write_env_no_overwrite(tmp_path):
     result = write_env(str(file), {"B": 2})
 
     assert result is None
+
+
+def test_normal_expansion():
+    data = {
+        "HOST": "localhost",
+        "PORT": "8080",
+        "URL": "http://${HOST}:${PORT}/api"
+    }
+
+    result = expand(data)
+
+    assert result["URL"] == "http://localhost:8080/api"
+
+
+def test_missing_variable_kept_as_is():
+    data = {
+        "URL": "http://${HOST}/api"
+    }
+
+    result = expand(data)
+
+    assert "${HOST}" in result["URL"]
+
+
+def test_circular_reference_detected_and_stops():
+    data = {
+        "A": "${B}",
+        "B": "${A}"
+    }
+
+    result = expand(data)
+
+    # should not loop forever
+    assert isinstance(result, dict)
+    assert "A" in result
+    assert "B" in result
+
+
+def test_deep_nesting():
+    data = {
+        "A": "hello",
+        "B": "${A}",
+        "C": "${B}",
+        "D": "${C}"
+    }
+
+    result = expand(data)
+
+    assert result["D"] == "hello"
+
+
+def test_multiple_replacements_in_one_string():
+    data = {
+        "HOST": "localhost",
+        "PORT": "8080",
+        "PATH": "api",
+        "URL": "http://${HOST}:${PORT}/${PATH}"
+    }
+
+    result = expand(data)
+
+    assert result["URL"] == "http://localhost:8080/api"
