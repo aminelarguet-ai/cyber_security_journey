@@ -101,8 +101,8 @@ def test_circular_reference_detected_and_stops():
 
     # should not loop forever
     assert isinstance(result, dict)
-    assert "A" in result
-    assert "B" in result
+    assert result["A"] =="${B}"
+    assert result["B"]=="${A}"
 
 
 def test_deep_nesting():
