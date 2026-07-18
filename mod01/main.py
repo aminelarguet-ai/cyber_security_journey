@@ -107,7 +107,7 @@ def expand(data: dict):
 
             value = value[:start] + replacement + value[end + 1:]
 
-        data[key] = value
+        data[key] = sort_type(value)
 
     return data
 
@@ -175,10 +175,19 @@ def get(key, default=None ,masked = False):
 
 
 
-def load_env(file_path): # take the parsed values from the read and parse function and load them in teh env 
-    data , comment = read_and_parse(file_path)
+def load_env(file_path):
+    # take parsed values and load them into env
+
+    result = read_and_parse(file_path)
+
+    if result is None:
+        print("file empty or not found")
+        sys.exit(1)
+
+    data, comment = result
     data = expand(data)
-    load (data)
+    load(data)
+    
 
 def require(key_list) :
     

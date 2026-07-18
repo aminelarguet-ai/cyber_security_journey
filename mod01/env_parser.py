@@ -1,45 +1,104 @@
-import os ,sys
+import os 
+from abc import ABC, abstractmethod
+import tempfile
 
 
-class EnvParser:
+class Pathchecker:
     def __init__(self, file_path):
         self.file_path = file_path
+
+    def check(self):
+        return os.path.exists(self.file_path)
+
+
+class CleanFile :
+    def __init__(self, file_path, checker):
+        self.file_path = file_path
+        self.checker = checker
+        self.dir_name = os.path.dirname(self.file_path)
+
+    def clean(self):
+        text = []
+        if not self.checker.check():
+            raise FileNotFoundError(f"file {self.file_path} not found")
+
+        with open(self.file_path, "r") as f, tempfile.NamedTemporaryFile(
+            mode="w",
+            dir=self.dir_name,
+            delete=False
+        ) as tmp:
+
+            temp_path = tmp.name
+
+            content = f.read()
+
+            if not content:
+                raise ValueError(f"file '{self.file_path}' is empty")
+            
+            for line in content.splitlines():
+                line = line.strip()
+
+                if not line:
+
+                    continue
+
+                tmp.write(line + "\n")
+                text.append(line)
+
+        os.replace(temp_path, self.file_path)
+        return text 
+
+class Converter:
+
+    def _is_int(self, value):
+        try:
+            int(value)
+            return True
+        except (ValueError, TypeError):
+            return False
+
+    def _is_float(self, value):
+        try:
+            float(value)
+            return True
+        except (ValueError, TypeError):
+            return False
+
+    def convert(self, value):
+        if value is None or value == "":
+            return ""
+
+        if isinstance(value, str):
+            lower = value.lower()
+
+            if lower == "true":
+                return True
+
+            elif lower == "false":
+                return False
+
+            elif (
+                (value.startswith("'") and value.endswith("'")) or
+                (value.startswith('"') and value.endswith('"'))
+            ):
+                return value[1:-1]
+
+        if self._is_int(value):
+            return int(value)
+
+        if self._is_float(value):
+            return float(value)
+
+        return value
+
+class Parser:
+    def __init__(self):
         self.data = {}
         self.comments = {}
+        self.converter = Converter()
 
-    def _is_int(self, string):
-         try:
-           int(string)
-           return True
-         except (ValueError, TypeError):
-          return False
-
-    
-    def _is_float(self, string): 
-           try:
-            float (string)
-            return True 
-           except ValueError :
-            return False 
-                
-    def _sort_type(self, line):
-        if not line :
-         return ""
-        else :
-         if line.lower() == "true":
-            return True 
-         elif line.lower() == "false":
-            return False 
-         elif line.startswith("'") and line.endswith("'") or line.startswith('"') and line.endswith('"'):
-            return line[1:-1]
-         elif self._is_int(line):
-            return int(line) 
-         elif self._is_float(line):
-            return float(line) 
-         else :
-            return line
     def _inside_comment(self, string): 
-           # cheking the presence if comments in the value strings and returning them f found
+        # cheking the presence if comments in the value strings and returning them f found
         value =""
         comment = ""
         in_quote = False 
@@ -52,7 +111,7 @@ class EnvParser:
             else :
                     if char in ("'", '"')  and in_quote == True:
                         in_quote = False 
-                        
+                    
             
             if char == "#" and not in_quote :
                 idx = i 
@@ -70,6 +129,7 @@ class EnvParser:
 
        
     def _expand(self): 
+           
            
            if not self.data:
             return None
@@ -98,31 +158,18 @@ class EnvParser:
 
                     value = value[:start] + replacement + value[end + 1:]
 
-                self.data[key] = self._sort_type(value)
-
+                self.data[key] = Converter.covert(value)
            return self.data 
-    def parse(self): 
-        """
-        this function will read the file line by line and parse the data as comments pairs of key and values skipping empty lines
-            """
-        if not  os.path.exists(self.file_path):
-            return None
-            
-        else :
-            with open (self.file_path , "r") as f :
-                for idx , line in enumerate(f) :
-                    line = line.strip()
-                    if not line  :
-                        continue 
-
-                    elif line.startswith("#"):
+    def parse(self,text ):
+                for idx ,line in enumerate(text):
+                    if line.startswith("#"):
                         self.comments [f"line {idx+1}"] = line 
                     else :
                         if "=" in line :
                             key , value = line.split("=",1)
                             key = key.strip()
                             value , nested_comment = self._inside_comment(value)
-                            value = self._sort_type(value.strip())
+                            value = self.converter.convert(value)
                             if value == "" :
                                 self.data [key] = f"missing value by line {idx+1}"
                             else :
@@ -130,7 +177,12 @@ class EnvParser:
 
                             if  nested_comment :
                                 self.comments [f"extracted comment {idx+1}"] = nested_comment
-                self._expand()
+                self._expand()                           
+
+   
+
+
+
         
 
 
@@ -201,24 +253,12 @@ class EnvFile:
             f.writelines(lines)
 
         return True
-
-
-if __name__ == "__main__":
-    def __init__(self, file_path=None):
-
-        parser = EnvParser(".env")
-        parser.parse()
-
-    def load(self, file_path):
-        store = EnvStore()
-        store.load(parser.data)
-
-    def require (self ,list):
-        store.require(["DATABASE_URL", "API_KEY"])
-
-    # 4. Get a value
-    print(store.get("API_KEY"))
-
-    # 5. Write to a new file
-    env_file = EnvFile(".env.backup")
-    env_file.write(parser.data)
+class BaseStore(ABC):          # inherit from ABC to enable abstract methods
+    
+    @abstractmethod
+    def get(self, key, default=None):
+        pass                  
+    
+    @abstractmethod
+    def require(self, key_list):
+        pass  
