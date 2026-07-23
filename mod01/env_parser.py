@@ -158,7 +158,7 @@ class Parser:
 
                     value = value[:start] + replacement + value[end + 1:]
 
-                self.data[key] = Converter.covert(value)
+                self.data[key] = Converter.convert(value)
            return self.data 
     def parse(self,text ):
                 for idx ,line in enumerate(text):
@@ -261,4 +261,4 @@ class BaseStore(ABC):          # inherit from ABC to enable abstract methods
     
     @abstractmethod
     def require(self, key_list):
-        pass  
+        pass      
