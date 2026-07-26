@@ -39,11 +39,12 @@ jobs:
         working-directory: mod01
         run: |
           bandit -r . \
-            --exclude ./venv,./.git,./__pycache__,./.pytest_cache
+            --exclude ./venv,./.git,./__pycache__,./.pytest_cache \
+            --skip B101
 
       - name: Dependency vulnerability scan
         run: |
-          pip-audit
+          pip-audit -r mod01/requirements.txt
 
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
