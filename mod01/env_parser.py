@@ -1,4 +1,4 @@
-import os 
+import os
 from abc import ABC, abstractmethod
 import tempfile
 
@@ -11,7 +11,7 @@ class Pathchecker:
         return os.path.exists(self.file_path)
 
 
-class CleanFile :
+class CleanFile:
     def __init__(self, file_path, checker):
         self.file_path = file_path
         self.checker = checker
@@ -34,7 +34,7 @@ class CleanFile :
 
             if not content:
                 raise ValueError(f"file '{self.file_path}' is empty")
-            
+
             for line in content.splitlines():
                 line = line.strip()
 
@@ -46,7 +46,8 @@ class CleanFile :
                 text.append(line)
 
         os.replace(temp_path, self.file_path)
-        return text 
+        return text
+
 
 class Converter:
 
@@ -91,99 +92,93 @@ class Converter:
 
         return value
 
+
 class Parser:
     def __init__(self):
         self.data = {}
         self.comments = {}
         self.converter = Converter()
 
-    def _inside_comment(self, string): 
+    def _inside_comment(self, string):
         # cheking the presence if comments in the value strings and returning them f found
-        value =""
+        value = ""
         comment = ""
-        in_quote = False 
+        in_quote = False
         idx = None
-        for i , char in enumerate(string) :
-            
-            if char in ("'", '"') and in_quote == False :
-                
-                in_quote = True 
-            else :
-                    if char in ("'", '"')  and in_quote == True:
-                        in_quote = False 
-                    
-            
-            if char == "#" and not in_quote :
-                idx = i 
+        for i, char in enumerate(string):
+
+            if char in ("'", '"') and in_quote == False:
+
+                in_quote = True
+            else:
+                if char in ("'", '"') and in_quote == True:
+                    in_quote = False
+
+            if char == "#" and not in_quote:
+                idx = i
                 value = string[:idx]
                 comment = string[idx+1:]
-                break 
-        if idx is not None  :
+                break
+        if idx is not None:
             value = string[:idx]
             comment = string[idx+1:]
-        else :
-            value = string 
+        else:
+            value = string
             comment = ""
-        
-        return value , comment
 
-       
-    def _expand(self): 
-           
-           
-           if not self.data:
+        return value, comment
+
+    def _expand(self):
+
+        if not self.data:
             return None
 
-           for key in list(self.data.keys()):
-                value = str(self.data[key])
+        for key in list(self.data.keys()):
+            value = str(self.data[key])
 
-                seen_states = set()  
+            seen_states = set()
 
-                while "${" in value:
-                    if value in seen_states:
-                        print(f"Circular reference detected while expanding '{key}'")
-                        break
+            while "${" in value:
+                if value in seen_states:
+                    print(
+                        f"Circular reference detected while expanding '{key}'")
+                    break
 
-                    seen_states.add(value)
+                seen_states.add(value)
 
-                    start = value.find("${")
-                    end = value.find("}", start)
+                start = value.find("${")
+                end = value.find("}", start)
 
-                    if end == -1:
-                        break
+                if end == -1:
+                    break
 
-                    var = value[start + 2:end]
+                var = value[start + 2:end]
 
-                    replacement = str(self.data.get(var, f"${{{var}}}"))
+                replacement = str(self.data.get(var, f"${{{var}}}"))
 
-                    value = value[:start] + replacement + value[end + 1:]
+                value = value[:start] + replacement + value[end + 1:]
 
-                self.data[key] = Converter.convert(value)
-           return self.data 
-    def parse(self,text ):
-                for idx ,line in enumerate(text):
-                    if line.startswith("#"):
-                        self.comments [f"line {idx+1}"] = line 
-                    else :
-                        if "=" in line :
-                            key , value = line.split("=",1)
-                            key = key.strip()
-                            value , nested_comment = self._inside_comment(value)
-                            value = self.converter.convert(value)
-                            if value == "" :
-                                self.data [key] = f"missing value by line {idx+1}"
-                            else :
-                                self.data[key] = value
+            self.data[key] = Converter.convert(value)
+        return self.data
 
-                            if  nested_comment :
-                                self.comments [f"extracted comment {idx+1}"] = nested_comment
-                self._expand()                           
+    def parse(self, text):
+        for idx, line in enumerate(text):
+            if line.startswith("#"):
+                self.comments[f"line {idx+1}"] = line
+            else:
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    key = key.strip()
+                    value, nested_comment = self._inside_comment(value)
+                    value = self.converter.convert(value)
+                    if value == "":
+                        self.data[key] = f"missing value by line {idx+1}"
+                    else:
+                        self.data[key] = value
 
-   
-
-
-
-        
+                    if nested_comment:
+                        self.comments[f"extracted comment {idx+1}"] = nested_comment
+        self._expand()
 
 
 class EnvStore:
@@ -193,53 +188,54 @@ class EnvStore:
         self._store = {}
 
     def load(self, data):
-        for key , value in data.items():
-         self._store[key] = str(value)
+        for key, value in data.items():
+            self._store[key] = str(value)
 
-    def get(self, key, default=None, masked=False): 
+    def get(self, key, default=None, masked=False):
         value = self._store.get(key, default)
-        if self._is_sensitive(key) or masked :
+        if self._is_sensitive(key) or masked:
             return self._mask(str(value))
         return value
-    def require(self, key_list): 
-            catched_error = {}
 
-            for key in key_list:
-                if key not in self._store:
-                    catched_error[key] = f"missing required key: {key}"
+    def require(self, key_list):
+        catched_error = {}
 
-            if catched_error:
-                for msg in catched_error.values():
+        for key in key_list:
+            if key not in self._store:
+                catched_error[key] = f"missing required key: {key}"
 
-                    print(f"{msg}")   
-                raise ValueError(f"Missing required keys: {list(catched_error.keys())}")
-            print("all keys have been successfully tested")
+        if catched_error:
+            for msg in catched_error.values():
 
-    def _mask(self, string): 
-            if len(string) <= 4 :
-             return "*" * len(string)
-            return string[:4] + "*" * (len(string)-4)
+                print(f"{msg}")
+            raise ValueError(
+                f"Missing required keys: {list(catched_error.keys())}")
+        print("all keys have been successfully tested")
 
-    def _is_sensitive(self, key): 
-             #find common values that wwe want to be masked while treating few edge cases such as monkey
+    def _mask(self, string):
+        if len(string) <= 4:
+            return "*" * len(string)
+        return string[:4] + "*" * (len(string)-4)
+
+    def _is_sensitive(self, key):
+        # find common values that wwe want to be masked while treating few edge cases such as monkey
         parts = key.lower().split("_")
         return any(part in self.SENSITIVE for part in parts)
-
 
 
 class EnvFile:
     def __init__(self, file_path):
         self.file_path = file_path
 
-    def exists(self): 
+    def exists(self):
         if os.path.exists(self.file_path):
-         return True 
-        else :
-         return False 
-        
+            return True
+        else:
+            return False
+
     def _format(self, data):
-       return [f"{key}={value}\n" for key, value in data.items()]
- 
+        return [f"{key}={value}\n" for key, value in data.items()]
+
     def write(self, data, overwrite=False):
         if not data:
             return None
@@ -253,12 +249,14 @@ class EnvFile:
             f.writelines(lines)
 
         return True
+
+
 class BaseStore(ABC):          # inherit from ABC to enable abstract methods
-    
+
     @abstractmethod
     def get(self, key, default=None):
-        pass                  
-    
+        pass
+
     @abstractmethod
     def require(self, key_list):
-        pass      
+        pass
