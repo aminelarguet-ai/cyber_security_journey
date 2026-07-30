@@ -1,326 +1,302 @@
-# env-parser
-
-A lightweight `.env` file parser, environment loader, and exporter written in pure Python — no third-party runtime dependencies required.
-
-Built as a learning exercise to understand how environment configuration and secret handling work under the hood, before reaching for production tools like `python-dotenv`.
-
------
-
-## Table of Contents
-
-- [Features](#features)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Supported Syntax](#supported-env-syntax)
-- [API Reference](#api-reference)
-- [Secret Masking](#secret-masking)
-- [Exporting Data](#exporting-environment-data)
-- [Testing](#testing)
-- [Security](#security)
-- [How It Works](#how-it-works)
-
------
-
-## Features
-
-- Parse `.env` files into typed Python dictionaries
-- Automatic type conversion:
-  - `true` / `false` → `bool`
-  - whole numbers → `int`
-  - decimal numbers → `float`
-  - quoted strings → `str` (quotes stripped)
-- Handle `#` characters safely inside quoted strings
-- Strip inline comments without breaking values
-- Track full-line and inline comments separately
-- Variable expansion with `${VAR}` syntax
-- Circular reference detection during expansion
-- Load variables directly into `os.environ`
-- Simple `get()` API with default value support
-- Required key validation with full error reporting before exit
-- Automatic secret detection and masking by key name
-- Export environment data back to `.env` files
-- Overwrite protection on file writes
-- No external runtime dependencies
-
------
-
-## Installation
-
-```bash
-git clone <repo-url>
-cd env-parser
-```
-
-Optional — install test runner:
-
-```bash
-pip install pytest
-```
-
-Optional — install static security scanner:
-
-```bash
-pip install bandit
-```
-
------
-
-## Quick Start
-
-```python
+env-parser 🐍
+A lightweight .env file parser written in pure Python — no extra packages needed!
+I built this as a learning project to understand how configuration management works, how to handle secrets safely, and what “production-grade” logging actually means. If you’re learning too, hopefully this helps!
+ 
+What’s inside?
+File
+What it does
+Best for
+main.py
+Simple functions: load, get, save
+Quick scripts, beginners
+env_parser.py
+Classes: Parser, EnvStore, EnvFile
+Bigger projects, OOP practice
+secure_logging.py
+JSON logs that auto-hide secrets
+Production / learning logging
+logger.py
+Basic file logging
+Seeing the “before” version
+Why two versions? I wanted to see how the same idea looks as plain functions vs. classes. Both work! Pick whichever makes more sense to you.
+ 
+Quick Start
+The simple way (functions in main.py)
 from main import load_env, get, require
+from secure_logging import get_secure_logger
 
-# 1. Load a .env file into os.environ
+# 1. Load your .env file into the environment
 load_env(".env")
 
-# 2. Validate that required keys are present (exits on failure)
+# 2. Make sure the important stuff is there
 require(["DATABASE_URL", "API_KEY", "SECRET_KEY"])
 
-# 3. Retrieve values
-print(get("DATABASE_URL"))         # plain retrieval
-print(get("API_KEY"))              # auto-masked (sensitive key name)
-print(get("PORT", default="8080")) # with fallback default
-print(get("SOME_VAR", masked=True))# force masking regardless of key name
-```
+# 3. Grab values when you need them
+print(get("DATABASE_URL"))                    # normal value
+print(get("API_KEY"))                          # auto-masked (shows abcd****)
+print(get("PORT", default="8080"))            # fallback if not set
 
------
+# 4. Log stuff safely — secrets get hidden automatically!
+logger = get_secure_logger(__name__)
+logger.info("Database connected", extra={"extra_data": {
+   "host": get("DATABASE_URL"),
+   "api_key": get("API_KEY")  # shows as REDACTED in logs
+}})
 
-## Supported `.env` Syntax
+The object-oriented way (env_parser.py)
+from env_parser import Parser, EnvFile, EnvStore
+from secure_logging import get_secure_logger
 
-```env
-# Full-line comments are preserved separately
+logger = get_secure_logger(__name__)
+
+# 1. Read the file (strips out blank lines and comments)
+file = EnvFile(".env")
+cleaned_lines = file.read()
+
+# 2. Parse into a dictionary
+parser = Parser()
+parser.parse(cleaned_lines)
+
+# 3. Load into the store
+store = EnvStore()
+store.load(parser.data)
+
+# 4. Use it!
+print(store.get("API_KEY"))  # auto-masked
+logger.info("Config loaded", extra={"extra_data": {"keys": len(parser.data)}})
+
+ 
+What syntax does it support?
+# This is a full-line comment — it's saved separately
 
 DEBUG=False
 PORT=5432
 DATABASE_URL=postgres://localhost/db
 
-# Multiple = signs: only the first is treated as the delimiter
+# Only the FIRST = is the delimiter — the rest are part of the value
 TOKEN=abc=123=xyz
 
-# Inline comments are stripped from the value
+# Inline comments get stripped from the value
 API_KEY=secret123  # production key
 
-# # inside quoted strings is preserved as-is
+# But # inside quotes is kept as-is!
 NAME="John # Smith"
 
-# Empty values are recorded with a descriptive message
+# Empty values are allowed
 EMPTY=
 
-# Variable expansion using ${VAR} syntax
+# You can reference other variables with ${VAR}
 BASE_URL=https://example.com
 API_URL=${BASE_URL}/api/v1
-```
 
------
-
-## API Reference
-
-### `load_env(file_path)`
-
-Parses a `.env` file and loads all key-value pairs into `os.environ`. Exits with an error message if the file is missing or empty.
-
-```python
-load_env(".env")
-```
-
------
-
-### `read_and_parse(file_path)`
-
-Parses a `.env` file and returns a `(data, comments)` tuple without modifying `os.environ`.
-
-- `data` — dict of parsed key-value pairs with automatic type conversion
-- `comments` — dict of full-line and inline comments keyed by line number
-
-```python
-data, comments = read_and_parse(".env")
-print(data["PORT"])     # 5432 (int)
-print(data["DEBUG"])    # False (bool)
-```
-
-Returns `None` if the file does not exist.
-
------
-
-### `get(key, default=None, masked=False)`
-
-Retrieves a value from `os.environ`.
-
-- Returns `default` if the key is not set
-- Automatically masks values whose key names contain sensitive substrings
-- Set `masked=True` to force masking on any key
-
-```python
-get("PORT")                    # "5432"
-get("API_KEY")                 # "abcd******"  (auto-masked)
-get("HOST", default="localhost")
-get("INTERNAL_URL", masked=True)
-```
-
------
-
-### `require(key_list)`
-
-Validates that every key in `key_list` is present in `os.environ`. Prints all missing keys at once, then calls `sys.exit(1)`.
-
-```python
-require(["DATABASE_URL", "SECRET_KEY", "API_KEY"])
-# Prints all missing keys before exiting — no hunt-and-fix loop
-```
-
------
-
-### `write_env(file_path, data, overwrite=False)`
-
-Writes a dictionary of key-value pairs to a `.env`-formatted file.
-
-- Returns `True` on success
-- Returns `None` (without raising) if the file exists and `overwrite=False`
-
-```python
-data = {"PORT": 5432, "DEBUG": False}
-write_env(".env.backup", data)             # safe default
-write_env(".env.backup", data, overwrite=True)  # force overwrite
-```
-
------
-
-### `expand(data)`
-
-Resolves `${VAR}` references within a parsed data dictionary. Handles deep nesting and detects circular references without looping forever.
-
-```python
-data = {
-    "HOST": "localhost",
-    "PORT": "8080",
-    "URL": "http://${HOST}:${PORT}/api"
-}
+ 
+API Cheatsheet
+main.py — Functions
+Function
+What it does
+load_env(path)
+Reads .env and loads everything into os.environ
+read_and_parse(path)
+Reads .env and returns (data_dict, comments_dict) without touching os.environ
+get(key, default=None, masked=False)
+Gets a value. Auto-masks secrets by key name.
+require(["KEY1", "KEY2"])
+Checks keys exist. If any are missing, prints what’s missing and exits.
+write_env(path, data, overwrite=False)
+Saves a dict back to .env format. Won’t overwrite unless you say so!
 expand(data)
-# data["URL"] → "http://localhost:8080/api"
-```
+Replaces ${VAR} with actual values. Detects circular references so it won’t loop forever.
+env_parser.py — Classes
+Class
+What it does
+Parser()
+Turns lines of text into a clean dictionary
+EnvStore()
+Holds the data and gives you get() / require()
+EnvFile(path)
+Reads/writes the actual file on disk
+secure_logging.py — Safe Logging
+from secure_logging import get_secure_logger
 
-- Unresolvable references are left as-is: `${MISSING}` stays `${MISSING}`
-- Circular references print a warning and stop expanding that key
+logger = get_secure_logger("myapp")
 
------
+# Simple message
+logger.info("Server started")
 
-## Secret Masking
+# Message with extra info
+logger.warning("Slow query", extra={"extra_data": {
+   "query_time_ms": 1234,
+   "table": "users"
+}})
 
-Keys whose names contain any of the following substrings (split on `_`) are automatically masked:
+# If something breaks, include the traceback
+logger.error("Auth failed", exc_info=True)
 
-```
-password  secret  key  token  api
-```
+What the log looks like:
+{
+ "timestamp": "2026-07-30T14:47:21.123456+00:00",
+ "level": "INFO",
+ "logger": "myapp",
+ "message": "Server started",
+ "module": "app",
+ "line": 42,
+ "extra": {
+   "user": "alice",
+   "password": "REDACTED"
+ }
+}
 
-The first 4 characters of the value are shown; the rest are replaced with `*`. Values 4 characters or shorter are fully masked.
+ 
+Secret Masking — How it works
+When you get() a value
+If the key name contains any of these words, the value gets masked automatically:
+password, secret, key, token, api
 
-```python
+Values longer than 4 chars: shows first 4, then * (e.g. abcd******)
+Values 4 chars or less: fully masked (e.g. ****)
 get("API_KEY")       # "abcd******"
 get("SECRET")        # "****"
-get("DATABASE_URL")  # "postgres://localhost/db"  (not masked)
-```
+get("DATABASE_URL")  # "postgres://localhost/db"  (not masked — safe to show)
 
-The check splits on `_` to avoid false positives — for example, `MONKEY` is not flagged because `monkey` split on `_` does not equal `key`.
+When you log something
+The logger scans every field name in your extra_data. If it matches a sensitive name, the value becomes "REDACTED" — even if it’s nested deep inside a dictionary or inside a list.
+Sensitive names it looks for:
+password, passwd, pwd,
+token, access_token, refresh_token,
+secret, api_key, apikey,
+authorization, auth,
+ssn, social_security_number,
+credit_card, card_number, cvv,
+private_key
 
------
+Example:
+logger.info("Auth attempt", extra={"extra_data": {
+   "user": "alice",
+   "credentials": {
+       "password": "hunter2",
+       "api_key": "sk-1234567890"
+   }
+}})
 
-## Exporting Environment Data
+Output:
+{
+ "extra": {
+   "user": "alice",
+   "credentials": {
+     "password": "REDACTED",
+     "api_key": "REDACTED"
+   }
+ }
+}
 
-Convert any dictionary back to `.env` format:
-
-```python
+💡 The point: You don’t have to remember to hide secrets. The code does it for you. That’s way safer than hoping you don’t accidentally log a password!
+ 
+Exporting back to .env
+Got a dictionary and want to save it as a .env file? Easy:
 from main import write_env
 
 data = {"HOST": "localhost", "PORT": 5432, "DEBUG": False}
-result = write_env(".env.export", data)
+write_env(".env.backup", data)
 
-if result is None:
-    print("File already exists. Pass overwrite=True to replace it.")
-```
-
-Output file:
-
-```env
+Result:
 HOST=localhost
 PORT=5432
 DEBUG=False
-```
 
------
+By default, it won’t overwrite an existing file. Pass overwrite=True if you mean it.
+ 
+How the parsing actually works
+Type conversion order
+When the parser sees a value, it tries to convert it in this order:
+Empty string → ""
+"true" / "false" (any case) → bool
+"quoted" or 'quoted' → str (quotes stripped)
+Looks like a number? → int
+Looks like a decimal? → float
+Everything else → str
+Comments
+The parser uses a simple character scanner. It keeps track of whether you’re inside quotes. If you are, # is just a character. If you’re not, # starts a comment.
+NAME="John # Smith"   → value is: John # Smith
+API_KEY=secret # ok   → value is: secret, comment is: ok
 
-## Testing
+Variable expansion
+${VAR} gets replaced with the actual value. If A depends on B and B depends on A, the parser catches that and stops instead of looping forever.
+ 
+Testing
+You’ll need pytest:
+pip install pytest
 
-Run the full test suite:
-
-```bash
+Run everything:
 pytest
-```
 
-Run a specific file:
+Run specific files:
+pytest test_parser.py     # parsing, masking, expansion, file I/O
+pytest test_logging.py    # JSON logs, redaction, nested data
 
-```bash
-pytest test_parser.py
-```
-
-### Test coverage
-
-|Area     |What’s tested                                                                   |
-|---------|--------------------------------------------------------------------------------|
-|Parsing  |Normal values, empty values, multiple `=` signs                                 |
-|Comments |Inline stripping, quoted `#` preservation                                       |
-|Types    |`bool`, `int`, `float`, `str` conversion                                        |
-|Masking  |Short values, long values, key sensitivity detection                            |
-|Writing  |Successful write, correct content, overwrite protection                         |
-|Expansion|Single reference, deep nesting, multiple references, missing vars, circular refs|
-
------
-
-## Security
-
-The codebase is periodically scanned with [Bandit](https://bandit.readthedocs.io/), a static security analysis tool for Python.
-
-```bash
+What’s tested?
+Area
+Covered?
+Normal values, empty values, multiple = signs
+✅
+Inline comments, quoted #, full-line comments
+✅
+bool, int, float, str conversion
+✅
+Masking short/long values, key name detection
+✅
+Writing files, overwrite protection
+✅
+Expansion: single, nested, missing vars, circular refs
+✅
+JSON format, nested redaction, case-insensitive matching
+✅
+ 
+Security
+Static analysis
+The code is scanned with Bandit:
+pip install bandit
 bandit -r .
-```
 
-Current status: **✅ Clean** — no issues detected in the current codebase.
+Current status: ✅ Clean — no issues found.
+What makes this “secure by default”?
+🔒 No secrets in source code — designed to keep them in .env files
+🔒 Auto-masking — secrets get hidden without you doing anything
+🔒 Circular reference protection — expansion can’t infinite-loop
+🔒 Overwrite protection — won’t accidentally wipe your .env
+🔒 Deep redaction — sensitive fields hidden at any nesting depth in logs
+🔒 Pre-commit hooks — Gitleaks scans for secrets before you commit
+🔒 CI pipeline — automated tests + security scans on every push
+CI/CD (GitHub Actions)
+Every push and PR runs: 1. Unit tests — pytest makes sure nothing is broken 2. SAST scan — Bandit checks for security bugs 3. Dependency audit — pip-audit checks for known vulnerabilities 4. Secrets scan — Gitleaks catches accidentally committed credentials
+ 
+Learning Path
+This repo is basically my learning diary. Here’s how it grew:
+Phase
+File
+What I learned
+1
+main.py
+How to parse text, convert types, and load into os.environ
+2
+env_parser.py
+How to refactor into classes (Parser, EnvStore, EnvFile)
+3
+logger.py
+Basic file logging — the “naive” version
+4
+secure_logging.py
+JSON logging, recursive redaction, production patterns
+Each phase still exists so you can compare them. If you’re learning too, try reading them in order — you’ll see the progression from “just make it work” to “make it safe and maintainable.”
+ 
+Installation
+git clone <repo-url>
+cd mod01
 
------
+Optional but recommended:
+pip install pytest      # for testing
+pip install bandit      # for security scanning
 
-## How It Works
-
-### Processing pipeline
-
-```
-.env file → read_and_parse → expand → load → os.environ
-                                              ↓
-                                           get / require
-```
-
-### Comment parsing
-
-Inline comments are handled with a single-pass character scanner that tracks whether the cursor is currently inside a quoted string. This ensures:
-
-```env
-NAME="John # Smith"   →  value: John # Smith  (# not treated as comment)
-API_KEY=secret123 # note  →  value: secret123, comment: note
-```
-
-### Type conversion order
-
-Values are converted in this priority order:
-
-1. Empty string → `""`
-1. `"true"` / `"false"` (case-insensitive) → `bool`
-1. Quoted string (`"..."` or `'...'`) → inner `str` with quotes stripped
-1. Valid integer → `int`
-1. Valid float → `float`
-1. Anything else → `str`
-
-### Variable expansion
-
-The `expand()` function resolves `${VAR}` references iteratively per key. It tracks previously seen states to detect circular references and break out safely, so `A → ${B} → ${A}` will not loop.
-
-### Overwrite protection
-
-`write_env()` checks for file existence before writing. If the file exists and `overwrite=False`, it returns `None` silently instead of raising an exception — making it safe to call unconditionally in scripts.
+ 
+Why I built this
+I wanted to understand: - How .env files actually get parsed (it’s not as simple as it looks!) - What “secure logging” means in practice - Why people use classes instead of just functions - How to catch my own mistakes before they become problems
+If any of that sounds interesting, dig around the code. It’s commented and (I hope) readable. Questions welcome! 🙌

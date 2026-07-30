@@ -1,85 +1,196 @@
 """
 secure_logging.py — JSON structured logging with automatic sensitive-field redaction.
-Module 1 deliverable: logging that is safe by default, not by developer discipline.
+
+Module 1 deliverable:
+Logging that is safe by default, not dependent on developer discipline.
 """
 
 import json
 import logging
 from datetime import datetime, timezone
 
-# Case-insensitive denylist of field names to redact wherever they appear,
-# at any nesting depth, in the `extra` payload.
-SENSITIVE_KEYS = {
-    "password", "passwd", "pwd",
-    "token", "access_token", "refresh_token",
-    "secret", "api_key", "apikey",
-    "authorization", "auth",
-    "ssn", "social_security_number",
-    "credit_card", "card_number", "cvv",
-    "private_key",
-}
 
 REDACTED = "REDACTED"
+
+_SECRET_PATTERNS = (
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "token",
+    "access_token",
+    "refresh_token",
+    "api_key",
+    "apikey",
+    "authorization",
+    "auth",
+    "ssn",
+    "social_security_number",
+    "credit_card",
+    "card_number",
+    "cvv",
+    "private_key",
+    "privatekey",
+)
+
+
+def _is_secret_key(key: str) -> bool:
+    """
+    Check whether a dictionary key contains sensitive information.
+    Matching is case-insensitive.
+    """
+    if not isinstance(key, str):
+        return False
+
+    normalized = key.lower()
+
+    return any(
+        pattern in normalized
+        for pattern in _SECRET_PATTERNS
+    )
 
 
 def redact(obj):
     """
-    Recursively walk a dict/list structure and replace the value of any
-    key matching SENSITIVE_KEYS (case-insensitive) with REDACTED.
-    Returns a new structure; does not mutate the input.
+    Recursively redact sensitive values in dictionaries/lists/tuples.
+
+    Returns a new structure.
+    Original object is not modified.
     """
+
     if isinstance(obj, dict):
-        out = {}
-        for k, v in obj.items():
-            if isinstance(k, str) and k.lower() in SENSITIVE_KEYS:
-                out[k] = REDACTED
+        output = {}
+
+        for key, value in obj.items():
+            if _is_secret_key(key):
+                # If the secret key holds a nested mapping/sequence, redact inside it
+                # instead of replacing the whole structure with the REDACTED string.
+                if isinstance(value, (dict, list, tuple)):
+                    output[key] = redact(value)
+                else:
+                    output[key] = REDACTED
             else:
-                out[k] = redact(v)
-        return out
-    elif isinstance(obj, list):
-        return [redact(item) for item in obj]
+                output[key] = redact(value)
+
+        return output
+
+    elif isinstance(obj, (list, tuple)):
+        return [
+            redact(item)
+            for item in obj
+        ]
+
     else:
         return obj
 
 
 class JSONFormatter(logging.Formatter):
+
     def format(self, record: logging.LogRecord) -> str:
+
         payload = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.fromtimestamp(
+                record.created,
+                timezone.utc
+            ).isoformat(),
+
             "level": record.levelname,
+
             "logger": record.name,
+
             "message": record.getMessage(),
+
             "module": record.module,
+
             "line": record.lineno,
         }
 
-        # Anything passed via logging.info("msg", extra={"foo": "bar"})
-        # lands as attributes on the record, not in a clean dict — so we
-        # only pull out what the caller explicitly namespaced under `extra_data`.
-        extra_data = getattr(record, "extra_data", None)
+        extra_data = getattr(
+            record,
+            "extra_data",
+            None
+        )
+
         if extra_data is not None:
+
+            # Handle JSON stored as string
+            if isinstance(extra_data, str):
+
+                try:
+                    extra_data = json.loads(extra_data)
+
+                except json.JSONDecodeError:
+                    extra_data = {
+                        "value": extra_data
+                    }
+
             payload["extra"] = redact(extra_data)
 
         if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
 
-        return json.dumps(payload, default=str)
+            payload["exception"] = (
+                self.formatException(record.exc_info)
+            )
+
+        return json.dumps(
+            payload,
+            default=str
+        )
 
 
-def get_secure_logger(name: str, level=logging.INFO) -> logging.Logger:
+def get_secure_logger(
+    name: str,
+    level=logging.INFO
+) -> logging.Logger:
+
     logger = logging.getLogger(name)
+
     logger.setLevel(level)
-    if not logger.handlers:  # avoid duplicate handlers on re-import
+
+    # Prevent duplicate handlers
+    if not logger.handlers:
+
         handler = logging.StreamHandler()
-        handler.setFormatter(JSONFormatter())
+
+        handler.setFormatter(
+            JSONFormatter()
+        )
+
         logger.addHandler(handler)
+
         logger.propagate = False
+
     return logger
 
 
 logger = get_secure_logger(__name__)
 
-logger.info("User login attempt", extra={"extra_data": {
-    "user": "alice",
-    "auth": {"password": "hunter2"}
-}})
+
+if __name__ == "__main__":
+
+    logger.info(                                  
+        "User login attempt",
+        extra={
+            "extra_data": {
+                "user": "alice",
+                "auth": {
+                    "password": "hunter2" #nosec
+                },
+                "metadata": {
+                    "ip": "127.0.0.1"
+                }
+            }
+        }
+    )
+
+    try:
+        1 / 0
+    except Exception:
+        logger.exception(
+            "Application error",
+            extra={
+                "extra_data": {
+                    "api_key": "123456"
+                }
+            }
+        )

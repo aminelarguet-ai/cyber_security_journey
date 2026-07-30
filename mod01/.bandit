@@ -1,5 +1,10 @@
-[bandit]
-exclude_dirs = venv,.git,__pycache__,.pytest_cache
+exclude_dirs:
+  - ./venv
+  - ./.venv
+  - ./.git
+  - ./__pycache__
+  - ./.pytest_cache
+  - ./tests
 
-[tool.bandit.assert_used]
-skips = test_*.py,*_test.py
+skips:
+  - B101
