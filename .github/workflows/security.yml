@@ -51,7 +51,6 @@ jobs:
         working-directory: ./mod01
         run: |
           bandit -r . --exclude venv,.venv,.git,__pycache__,.pytest_cache,tests \
-            --exit-zero
 
       - name: Run Gitleaks secret scan
         uses: gitleaks/gitleaks-action@v2

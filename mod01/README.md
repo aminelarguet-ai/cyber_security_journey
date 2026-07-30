@@ -300,3 +300,26 @@ pip install bandit      # for security scanning
 Why I built this
 I wanted to understand: - How .env files actually get parsed (it’s not as simple as it looks!) - What “secure logging” means in practice - Why people use classes instead of just functions - How to catch my own mistakes before they become problems
 If any of that sounds interesting, dig around the code. It’s commented and (I hope) readable. Questions welcome! 🙌
+
+Finally this is a test i did run locally and its result 
+Detect hardcoded secrets.................................................Failed
+- hook id: gitleaks
+- exit code: 1
+
+○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
+
+Finding:     ...S_SECRET_ACCESS_KEY=REDACTED67890
+Secret:      REDACTED
+RuleID:      aws-access-token
+Entropy:     3.584184
+File:        mod01/scratch_secret.txt
+Line:        1
+Fingerprint: mod01/scratch_secret.txt:aws-access-token:1
+
+10:18PM INF 1 commits scanned.
+10:18PM INF scan completed in 7.44ms
+10:18PM WRN leaks found: 1
