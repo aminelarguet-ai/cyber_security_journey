@@ -9,61 +9,52 @@ on:
     branches:
       - main
 
-
 jobs:
   security-checks:
-
     runs-on: ubuntu-latest
 
-
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-
       - name: Install security tools
         run: |
           python -m pip install --upgrade pip
           pip install bandit pip-audit
 
-
       - name: Install project dependencies
         run: |
           find . -name "requirements*.txt" -exec pip install -r {} +
-
 
       - name: Run pip-audit dependency scan
         run: |
           pip-audit --desc
 
-
       - name: Run Bandit SAST scan
+        working-directory: ./mod01
         run: |
           bandit \
             -r . \
-            -c .bandit \
-            --exclude ./venv,./.git,./__pycache__,./.pytest_cache \
             -f json \
-            -o bandit-report.json
-
+            -o ../bandit-report.json
 
       - name: Display Bandit results
         if: always()
+        working-directory: ./mod01
         run: |
-          bandit \
-            -r . \
-            -c .bandit \
-            --exclude ./venv,./.git,./__pycache__,./.pytest_cache
-
+          bandit -r .
+      
+      - name: Run Gitleaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Bandit report
         if: always()
