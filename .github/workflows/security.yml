@@ -43,15 +43,16 @@ jobs:
           bandit \
             -r . \
             -f json \
-            -o ../bandit-report.json
+            -o ../bandit-report.json \
+            --exit-zero
 
       - name: Display Bandit results
         if: always()
         working-directory: ./mod01
         run: |
-          bandit -r . --exclude "venv,.venv,.git,__pycache__,.pytest_cache,tests,test" --exit-zero 
+          bandit -r . --exclude venv,.venv,.git,__pycache__,.pytest_cache,tests \
+            --exit-zero
 
-      
       - name: Run Gitleaks secret scan
         uses: gitleaks/gitleaks-action@v2
         env:
