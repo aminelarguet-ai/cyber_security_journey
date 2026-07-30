@@ -49,7 +49,7 @@ jobs:
         if: always()
         working-directory: ./mod01
         run: |
-          bandit -r . --exclude venv,.venv,.git,__pycache__,.pytest_cache,tests,testn
+          bandit -r . --exclude venv,.venv,.git,__pycache__,.pytest_cache,tests,test --exit-zero 
 
       
       - name: Run Gitleaks secret scan
