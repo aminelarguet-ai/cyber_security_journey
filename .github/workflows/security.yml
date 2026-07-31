@@ -37,6 +37,11 @@ jobs:
         run: |
           pip-audit --desc
 
+      - name: Run Gitleaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run Bandit SAST scan
         working-directory: ./mod01
         run: |
@@ -51,11 +56,6 @@ jobs:
         working-directory: ./mod01
         run: |
           bandit -r . --exclude venv,.venv,.git,__pycache__,.pytest_cache,tests \
-
-      - name: Run Gitleaks secret scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Bandit report
         if: always()
