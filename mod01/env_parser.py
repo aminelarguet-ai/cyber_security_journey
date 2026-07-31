@@ -158,7 +158,7 @@ class Parser:
 
                 value = value[:start] + replacement + value[end + 1:]
 
-            self.data[key] = Converter.convert(value)
+            self.data[key] = self.converter.convert(value)
         return self.data
 
     def parse(self, text):
@@ -260,3 +260,6 @@ class BaseStore(ABC):          # inherit from ABC to enable abstract methods
     @abstractmethod
     def require(self, key_list):
         pass
+
+if __name__ == "__main__":
+    pass 

@@ -36,6 +36,11 @@ jobs:
       - name: Run pip-audit dependency scan
         run: |
           pip-audit --desc
+      - name: Run pytest
+        working-directory: mod01
+        run: |
+          pytest
+
 
       - name: Run Gitleaks secret scan
         uses: gitleaks/gitleaks-action@v2
